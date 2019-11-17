@@ -1,0 +1,15 @@
+{
+  "name": "ui-setup",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "devDependencies": {
+    "@vue/cli": "^4.0.5"
+  },
+  "scripts": {
+    "vue": "vue",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}
