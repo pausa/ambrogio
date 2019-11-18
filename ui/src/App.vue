@@ -28,7 +28,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   align: center;
   height: 100%;
-  background: #fff7df;
+  background: #ffe898;
   color: #000000;
 }
 #app {
