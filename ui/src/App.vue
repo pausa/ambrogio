@@ -28,8 +28,8 @@ body {
   -moz-osx-font-smoothing: grayscale;
   align: center;
   height: 100%;
-  background: #ffe898;
-  color: #000000;
+  color: #ffe898;
+  background: #000000;
 }
 #app {
   height: 100%;
