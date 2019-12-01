@@ -1,18 +1,41 @@
 <template>
   <div id="app">
     <div id="container">
-      <Clock/>
+      <component :is="component" v-bind="props"/>
     </div>
   </div>
 </template>
 
 <script>
-import Clock from './components/Clock.vue'
+import Clock from './components/Clock.vue';
+import notification from './components/Notification.vue';
+const { ipcRenderer } = window.require('electron');
 
 export default {
   name: 'app',
   components: {
-    Clock
+    Clock,
+    notification
+  },
+  data: function(){
+      return {
+          msg: "tbd",
+          component: Clock,
+          props: null
+      }
+  },
+  created: function() {
+    ipcRenderer.on('new-component', function (event, arg){
+      this.updateComponent(arg.type, arg.body);
+    }.bind(this));
+  },
+  methods: {
+    updateComponent: function(name, props){
+      this.component = name;
+      this.props = props;
+
+      setTimeout(function(){this.component = 'Clock'}.bind(this), 5000);
+    }
   }
 }
 </script>
@@ -30,6 +53,7 @@ body {
   height: 100%;
   color: #ffe898;
   background: #000000;
+  overflow: hidden;
 }
 #app {
   height: 100%;
