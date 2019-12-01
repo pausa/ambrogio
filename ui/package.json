@@ -5,10 +5,13 @@
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
-    "lint": "vue-cli-service lint"
+    "lint": "vue-cli-service lint",
+    "app": "electron app.js"
   },
   "dependencies": {
+    "body-parser": "^1.19.0",
     "core-js": "^3.3.2",
+    "express": "^4.17.1",
     "node-ipc": "^9.1.1",
     "vue": "^2.6.10"
   },
@@ -17,6 +20,7 @@
     "@vue/cli-plugin-eslint": "^4.0.0",
     "@vue/cli-service": "^4.0.0",
     "babel-eslint": "^10.0.3",
+    "electron": "^7.1.2",
     "eslint": "^5.16.0",
     "eslint-plugin-vue": "^5.0.0",
     "vue-template-compiler": "^2.6.10"
