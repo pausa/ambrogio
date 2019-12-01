@@ -2,17 +2,25 @@
   <div id="app">
     <div id="container">
       <Clock/>
+      <div>{{ socket }}</div>
     </div>
   </div>
 </template>
 
 <script>
+
+ 
 import Clock from './components/Clock.vue'
 
 export default {
   name: 'app',
   components: {
     Clock
+  },
+  data: function(){
+      return {
+          socket: "tbd"
+      }
   }
 }
 </script>
