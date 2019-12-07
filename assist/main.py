@@ -38,6 +38,7 @@ from tenacity import retry, stop_after_attempt, retry_if_exception
 
 import snowboydecoder
 from subprocess import Popen, PIPE
+import wave
 
 try:
     from googlesamples.assistant.grpc import (
@@ -60,6 +61,8 @@ DIALOG_FOLLOW_ON = embedded_assistant_pb2.DialogStateOut.DIALOG_FOLLOW_ON
 CLOSE_MICROPHONE = embedded_assistant_pb2.DialogStateOut.CLOSE_MICROPHONE
 PLAYING = embedded_assistant_pb2.ScreenOutConfig.PLAYING
 DEFAULT_GRPC_DEADLINE = 60 * 3 + 5
+
+VOLUME=50
 
 
 class SampleAssistant(object):
@@ -128,6 +131,8 @@ class SampleAssistant(object):
         continue_conversation = False
         device_actions_futures = []
 
+        # DINGING AS LATE AS POSSIBLE
+        ding(self.conversation_stream)
         self.conversation_stream.start_recording()
         logging.info('Recording audio request.')
 
@@ -396,8 +401,7 @@ def main(api_endpoint,
             time.sleep(delay)
 
     def hotword_callback():
-        p = Popen(["/usr/bin/mpg123", "resources/dica.mp3"], stdout=PIPE, stderr=PIPE)
-        p.communicate()
+        logging.debug("dica")
         switch.interrupted = True
 
     def do_assist():
@@ -414,18 +418,20 @@ def main(api_endpoint,
             sink=audio_device,
             iter_size=audio_iter_size,
             sample_width=audio_sample_width,
-            volume=75
+            volume=VOLUME
         )
         with SampleAssistant(lang, device_model_id, device_id,
                              conversation_stream, None,
                              grpc_channel, grpc_deadline,
                              device_handler) as assistant:
             logging.debug("ambrogio engaging")
+
             continue_conversation = assistant.assist()
             while continue_conversation:
                 continue_conversation = assistant.assist()
             logging.debug("ambrogio out")
             
+        # dinging on exit, so it can listen again
         conversation_stream.close()
 
     def is_interrupted():
@@ -436,15 +442,28 @@ def main(api_endpoint,
     switch.interrupted = False
     while True:
         logging.info("initializing snowboydetector")
-        detector = snowboydecoder.HotwordDetector("resources/ambrogio.pmdl", sensitivity=0.44, audio_gain=50)
+        ding()
+        detector = snowboydecoder.HotwordDetector("resources/ambrogio.pmdl", sensitivity=0.45, audio_gain=VOLUME)
         logging.info("starting snowboydetector")
         detector.start(hotword_callback, interrupt_check=is_interrupted, sleep_time=0.05)
         detector.terminate()
         print ("terminated snowboy")
         logging.info("terminating snowboydetector")
+        time.sleep(0.5)
         do_assist()
         switch.interrupted = False
         
+def ding(conversation_stream=None):
+    if not conversation_stream:
+        p = Popen(["/usr/bin/play", "resources/ding.wav"], stdout=PIPE, stderr=PIPE)
+        p.communicate()
+    else:
+        wf = open("resources/ding.wav", "rb")
+        conversation_stream.start_playback()
+        conversation_stream.write(wf.read())
+        conversation_stream.stop_playback()
+        wf.close()
+
 class Switch():
     pass
 
