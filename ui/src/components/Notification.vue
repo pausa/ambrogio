@@ -1,12 +1,23 @@
 <template>
   <div id = "notification">
     <p class="title">{{ title }}</p>
-    <p class="msg">{{ msg }}</p>
+    <p class="msg">{{ normalMessage }}</p>
   </div>
 </template>
 <script>
 export default {
-    props: ['title', 'msg']
+    props: ['title', 'msg'],
+    computed: {
+      normalMessage: function(){
+        let message = this.msg
+          .split(" ")
+          .map(word => word.length > 16 ? `[${word.substring(0, 15)}]` : word)
+          .reduce(function(total, current){
+            return total += " " + current;
+          }, "");
+        return message;
+      }
+    }
 }
 
 </script>

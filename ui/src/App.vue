@@ -1,7 +1,7 @@
 <template>
   <div id="app">
     <div id="container">
-      <component :is="component" v-bind="props"/>
+      <component :is="display.component" v-bind="display.props"/>
     </div>
   </div>
 </template>
@@ -20,21 +20,51 @@ export default {
   data: function(){
       return {
           msg: "tbd",
-          component: Clock,
-          props: null
+          props: null,
+          defaultDisplay: {
+            component: Clock,
+            props: null
+          },
+          display: {},
+          backlog: [],
+          shouldChange: true
       }
   },
   created: function() {
+    this.display = this.defaultDisplay;
+
     ipcRenderer.on('new-component', function (event, arg){
-      this.updateComponent(arg.type, arg.body);
+      this.queueComponent(arg.type, arg.body);
     }.bind(this));
   },
   methods: {
-    updateComponent: function(name, props){
-      this.component = name;
-      this.props = props;
+    queueComponent: function(name, props){
+      // queuing next change
+      let next = {};
+      next.component = name;
+      next.props = props;
+      this.backlog.push(next);
 
-      setTimeout(function(){this.component = 'Clock'}.bind(this), 5000);
+      this.tryUpdateComponent();
+      //setTimeout(function(){this.component = 'Clock'}.bind(this), 5000);
+    },
+    tryUpdateComponent: function(){
+      // I want the first change to happena asap, but wait a timeout for the others
+      if (this.shouldChange){
+        this.shouldChange = false;
+        if (this.backlog.length){
+          this.display = this.backlog.shift();
+          // next change should happen after 5 seconds
+          setTimeout(function(){
+            this.shouldChange = true;
+            this.tryUpdateComponent();
+        }.bind(this), 5000);
+        } else {
+          this.display = this.defaultDisplay;
+          // can change also right away
+          this.shouldChange = true;
+        }
+      }
     }
   }
 }
