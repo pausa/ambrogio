@@ -62,7 +62,7 @@ CLOSE_MICROPHONE = embedded_assistant_pb2.DialogStateOut.CLOSE_MICROPHONE
 PLAYING = embedded_assistant_pb2.ScreenOutConfig.PLAYING
 DEFAULT_GRPC_DEADLINE = 60 * 3 + 5
 
-VOLUME=50
+VOLUME=100
 
 
 class SampleAssistant(object):
@@ -112,7 +112,6 @@ class SampleAssistant(object):
     def __exit__(self, etype, e, traceback):
         if e:
             return False
-        self.conversation_stream.close()
 
     def is_grpc_error_unavailable(e):
         is_grpc_error = isinstance(e, grpc.RpcError)
@@ -400,72 +399,51 @@ def main(api_endpoint,
             logging.info('Device is blinking.')
             time.sleep(delay)
 
-    def hotword_callback():
-        logging.debug("dica")
-        switch.interrupted = True
+    # Configure audio source and sink.
+    audio_device = audio_helpers.SoundDeviceStream(
+                sample_rate=audio_sample_rate,
+                sample_width=audio_sample_width,
+                block_size=audio_block_size,
+                flush_size=audio_flush_size)
 
-    def do_assist():
-        # Configure audio source and sink.
-        audio_device = audio_helpers.SoundDeviceStream(
-                    sample_rate=audio_sample_rate,
-                    sample_width=audio_sample_width,
-                    block_size=audio_block_size,
-                    flush_size=audio_flush_size)
+    # Create conversation stream with the given audio source and sink.
+    conversation_stream = audio_helpers.ConversationStream(
+        source=audio_device,
+        sink=audio_device,
+        iter_size=audio_iter_size,
+        sample_width=audio_sample_width,
+        volume=VOLUME
+    )
 
-        # Create conversation stream with the given audio source and sink.
-        conversation_stream = audio_helpers.ConversationStream(
-            source=audio_device,
-            sink=audio_device,
-            iter_size=audio_iter_size,
-            sample_width=audio_sample_width,
-            volume=VOLUME
-        )
-        with SampleAssistant(lang, device_model_id, device_id,
-                             conversation_stream, None,
-                             grpc_channel, grpc_deadline,
-                             device_handler) as assistant:
+    with SampleAssistant(lang, device_model_id, device_id,
+                         conversation_stream, None,
+                         grpc_channel, grpc_deadline,
+                         device_handler) as assistant:
+        def do_assist():
             logging.debug("ambrogio engaging")
 
             continue_conversation = assistant.assist()
             while continue_conversation:
                 continue_conversation = assistant.assist()
             logging.debug("ambrogio out")
-            
-        # dinging on exit, so it can listen again
-        conversation_stream.close()
 
-    def is_interrupted():
-        return switch.interrupted
+            ding(conversation_stream)
 
-    # TODO MUST improve this flow, my eyes hurt
-    switch = Switch()
-    switch.interrupted = False
-    while True:
         logging.info("initializing snowboydetector")
-        ding()
-        detector = snowboydecoder.HotwordDetector("resources/ambrogio.pmdl", sensitivity=0.45, audio_gain=VOLUME)
+        ding(conversation_stream)
+        detector = snowboydecoder.HotwordDetector("resources/ambrogio.pmdl", sensitivity=0.40, audio_gain=0.50)
         logging.info("starting snowboydetector")
-        detector.start(hotword_callback, interrupt_check=is_interrupted, sleep_time=0.05)
+        detector.start(do_assist)
+        logging.info("terminating snowboydetector")
         detector.terminate()
         print ("terminated snowboy")
-        logging.info("terminating snowboydetector")
-        time.sleep(0.5)
-        do_assist()
-        switch.interrupted = False
         
 def ding(conversation_stream=None):
-    if not conversation_stream:
-        p = Popen(["/usr/bin/play", "resources/ding.wav"], stdout=PIPE, stderr=PIPE)
-        p.communicate()
-    else:
-        wf = open("resources/ding.wav", "rb")
-        conversation_stream.start_playback()
-        conversation_stream.write(wf.read())
-        conversation_stream.stop_playback()
-        wf.close()
-
-class Switch():
-    pass
+    wf = open("resources/ding.wav", "rb")
+    conversation_stream.start_playback()
+    conversation_stream.write(wf.read())
+    conversation_stream.stop_playback()
+    wf.close()
 
 if __name__ == '__main__':
     main()
