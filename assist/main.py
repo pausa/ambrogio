@@ -34,11 +34,13 @@ from google.assistant.embedded.v1alpha2 import (
     embedded_assistant_pb2,
     embedded_assistant_pb2_grpc
 )
+
 from tenacity import retry, stop_after_attempt, retry_if_exception
 
 import snowboydecoder
-from subprocess import Popen, PIPE
-import wave
+from google.cloud import texttospeech
+import datetime as dt
+import integration.darksky as dark
 
 try:
     from googlesamples.assistant.grpc import (
@@ -81,12 +83,14 @@ class SampleAssistant(object):
 
     def __init__(self, language_code, device_model_id, device_id,
                  conversation_stream, display,
-                 channel, deadline_sec, device_handler):
+                 channel, deadline_sec, device_handler,speak):
         self.language_code = language_code
         self.device_model_id = device_model_id
         self.device_id = device_id
         self.conversation_stream = conversation_stream
         self.display = display
+        self.speak = speak
+        self.last_request = None
 
         # Opaque blob provided in AssistResponse that,
         # when provided in a follow-up AssistRequest,
@@ -154,12 +158,24 @@ class SampleAssistant(object):
                 logging.info('Transcript of user request: "%s".',
                              ' '.join(r.transcript
                                       for r in resp.speech_results))
-            if len(resp.audio_out.audio_data) > 0:
-                if not self.conversation_stream.playing:
-                    self.conversation_stream.stop_recording()
-                    self.conversation_stream.start_playback()
-                    logging.info('Playing assistant response.')
-                self.conversation_stream.write(resp.audio_out.audio_data)
+            if len(resp.speech_results) == 1 and resp.speech_results[0].stability == 1.0:
+                #logging.info('final request: {}'.format(' '.join(r.transcript for r in resp.speech_results)))
+                logging.info('final request: {}'.format(resp.speech_results[0].transcript))
+                self.last_request = resp.speech_results[0].transcript
+
+            if len(resp.audio_out.audio_data) > 0 and not resp.dialog_state_out.supplemental_display_text:
+                if self.last_request:
+                    self.speak('eseguo: {}'.format(self.last_request))
+                    self.last_request = None
+            #    if not self.conversation_stream.playing:
+            #        self.conversation_stream.stop_recording()
+            #        self.conversation_stream.start_playback()
+            #        logging.info('Playing assistant response.')
+            #    self.conversation_stream.write(resp.audio_out.audio_data)
+            if resp.dialog_state_out.supplemental_display_text:
+                logging.info("response: {}".format(resp.dialog_state_out.supplemental_display_text))
+                self.speak(resp.dialog_state_out.supplemental_display_text)
+                self.last_request = None
             if resp.dialog_state_out.conversation_state:
                 conversation_state = resp.dialog_state_out.conversation_state
                 logging.debug('Updating conversation state.')
@@ -181,8 +197,7 @@ class SampleAssistant(object):
                 if fs:
                     device_actions_futures.extend(fs)
             if self.display and resp.screen_out.data:
-                system_browser = browser_helpers.system_browser
-                system_browser.display(resp.screen_out.data)
+                logging.info(resp.screen_out.data)
 
         if len(device_actions_futures):
             logging.info('Waiting for device executions to complete.')
@@ -203,7 +218,8 @@ class SampleAssistant(object):
             audio_out_config=embedded_assistant_pb2.AudioOutConfig(
                 encoding='LINEAR16',
                 sample_rate_hertz=self.conversation_stream.sample_rate,
-                volume_percentage=self.conversation_stream.volume_percentage,
+                #volume_percentage=self.conversation_stream.volume_percentage,
+                volume_percentage=0,
             ),
             dialog_state_in=embedded_assistant_pb2.DialogStateIn(
                 language_code=self.language_code,
@@ -378,27 +394,6 @@ def main(api_endpoint,
             with open(device_config, 'w') as f:
                 json.dump(payload, f)
 
-    device_handler = device_helpers.DeviceRequestHandler(device_id)
-
-    @device_handler.command('action.devices.commands.OnOff')
-    def onoff(on):
-        if on:
-            logging.info('Turning device on')
-        else:
-            logging.info('Turning device off')
-
-    @device_handler.command('com.example.commands.BlinkLight')
-    def blink(speed, number):
-        logging.info('Blinking device %s times.' % number)
-        delay = 1
-        if speed == "SLOWLY":
-            delay = 2
-        elif speed == "QUICKLY":
-            delay = 0.5
-        for i in range(int(number)):
-            logging.info('Device is blinking.')
-            time.sleep(delay)
-
     # Configure audio source and sink.
     audio_device = audio_helpers.SoundDeviceStream(
                 sample_rate=audio_sample_rate,
@@ -415,10 +410,67 @@ def main(api_endpoint,
         volume=VOLUME
     )
 
+    tts_client = texttospeech.TextToSpeechClient()
+    tts_voice = texttospeech.types.VoiceSelectionParams(language_code='it-IT', 
+            ssml_gender=texttospeech.enums.SsmlVoiceGender.MALE, 
+            name="it-it-Wavenet-D")
+    tts_config = texttospeech.types.AudioConfig(audio_encoding=texttospeech.enums.AudioEncoding.LINEAR16, 
+            sample_rate_hertz=16000,
+            pitch=-2.50,
+            speaking_rate=1.0,
+            effects_profile_id=['small-bluetooth-speaker-class-device'])
+
+
+
+    device_handler = device_helpers.DeviceRequestHandler(device_id)
+    
+    def speak(text):
+        text=text.replace("\\n", ". ")
+        text=text.replace("\\t", ". ")
+        text=text.replace(" h ", " ore ")
+        text=text.replace("1 ore ", "1 ora ")
+        text=text.replace(" per da ", " per ")
+        order = texttospeech.types.SynthesisInput(text=text)
+        logging.info('saying: {}'.format(order))
+        response = tts_client.synthesize_speech(order, tts_voice, tts_config)
+        conversation_stream.start_playback()
+        conversation_stream.write(response.audio_content)
+        conversation_stream.stop_playback()
+
+    @device_handler.command('ambrogio.TEST')
+    def order(number):
+        speak('ordine: {} eseguito'.format(number))
+
+    @device_handler.command('ambrogio.WEATHER')
+    def weather(place_name, place, date_name, date):
+        place_name=nvl(place_name, 'Haarlem')
+        def_coordinates={'latitude': 52.3873878, 'longitude': 4.6462194}
+        place=nvl(place, def_coordinates, lambda x: x['coordinates'])
+        date_name=nvl(date_name, 'oggi')
+        date=nvl(date, None, lambda x: dt.date(**x))
+        logging.info("date: {}".format(date))
+
+        params = dict() 
+        params.update(place)
+        params.update({'day': date})
+        wreq = dark.WeatherRequest(**params)
+        wres = dark.call_api(wreq)
+
+        to_speak='{}, {} è {} con una temperatura durante '\
+                'il giorno di {} gradi e durante la notte di {}'.format(
+                    place_name,
+                    date_name,
+                    wres.summaryHuman,
+                    round(wres.tempHigh),
+                    round(wres.tempLow)
+                )
+
+        speak(to_speak)
+
     with SampleAssistant(lang, device_model_id, device_id,
                          conversation_stream, None,
                          grpc_channel, grpc_deadline,
-                         device_handler) as assistant:
+                         device_handler, speak) as assistant:
         def do_assist():
             logging.debug("ambrogio engaging")
 
@@ -444,6 +496,14 @@ def ding(conversation_stream=None):
     conversation_stream.write(wf.read())
     conversation_stream.stop_playback()
     wf.close()
+
+
+def nvl(value, ifNone, tr=lambda x: x):
+    if value is None:
+        return ifNone
+    if len(value) == 0:
+        return ifNone
+    return tr(value)
 
 if __name__ == '__main__':
     main()

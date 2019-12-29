@@ -1,0 +1,100 @@
+{
+  "locale":"it",
+  "manifest":{
+    "displayName":"Ambrogio Embedded",
+    "invocationName": "Ambrogio Embedded",
+    "category": "SPEAKER"
+  },
+  "actions":[
+    {
+      "name":"amborgio.TEST",
+      "availability": {
+        "deviceClasses" : [
+          {
+          "assistantSdkDevice": {}
+          }
+        ]
+      },
+      "intent" : {
+        "name": "ambrogio.TEST",
+        "parameters": [
+          {
+            "name" : "number",
+            "type" : "SchemaOrg_Number"
+          }
+        ],
+        "trigger" : {
+          "queryPatterns" : [
+            "esegui ordine $SchemaOrg_Number:number",
+            "esegui l'ordine $SchemaOrg_Number:number"
+          ]
+        }
+      },
+      "fulfillment": {
+        "staticFulfillment": {
+          "templatedResponse" : {
+            "items" : [
+              {
+                "deviceExecution": {
+                  "command" : "ambrogio.TEST",
+                  "params" : {
+                    "number":"$number"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name":"amborgio.WEATHER",
+      "availability": {
+        "deviceClasses" : [
+          {
+          "assistantSdkDevice": {}
+          }
+        ]
+      },
+      "intent" : {
+        "name": "ambrogio.WEATHER",
+        "parameters": [
+          {
+            "name" : "place",
+            "type" : "SchemaOrg_Place"
+          },
+          {
+            "name" : "date",
+            "type" : "SchemaOrg_Date"
+          }
+        ],
+        "trigger" : {
+          "queryPatterns" : [
+            "che tempo fa( a)?( ad)?( $SchemaOrg_Place:place)?( $SchemaOrg_Date:date)?",
+            "che tempo fa( $SchemaOrg_Date:date)?( a)?( ad)?( $SchemaOrg_Place:place)?",
+            "piove( a)?( ad)?( $SchemaOrg_Place:place)?"
+          ]
+        }
+      },
+      "fulfillment": {
+        "staticFulfillment": {
+          "templatedResponse" : {
+            "items" : [
+              {
+                "deviceExecution": {
+                  "command" : "ambrogio.WEATHER",
+                  "params" : {
+                    "place_name":"$place",
+                    "place":"$place.structured",
+                    "date_name":"$date",
+                    "date":"$date.structured"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
