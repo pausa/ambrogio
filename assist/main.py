@@ -67,6 +67,9 @@ DEFAULT_GRPC_DEADLINE = 60 * 3 + 5
 VOLUME=100
 
 VOWELS = ['a', 'e', 'i', 'o', 'u', 'j', 'h','y']
+MIDNIGHT = dt.time(hour=0)
+MORNING = dt.timedelta(hours=12)
+AFTERNOON = dt.timedelta(hours=17)
 
 class SampleAssistant(object):
     """Sample Assistant that supports conversations and device actions.
@@ -478,12 +481,20 @@ def main(api_endpoint,
 
     @device_handler.command('ambrogio.GREET')
     def morning(nope):
-        to_speak = '. '.join([
-                'salve',
-                weather(None,None,None,None),
-                weather('amsterdam',{'coordinates':{'latitude':52.3667,'longitude':4.8945}},None,None)
-                ])
-        speak(to_speak)
+        greet = 'salve'
+        base = dt.datetime.combine(dt.date.today(), MIDNIGHT)
+        now = dt.datetime.now()
+
+        if now < base + MORNING:
+            greet = 'buongiorno'
+        elif now < base + AFTERNOON:
+            greet = 'buon pomeriggio'
+        else:
+            greet = 'buona sera'
+
+        speak(greet)
+        speak(weather(None,None,None,None))
+        speak(weather('amsterdam',{'coordinates':{'latitude':52.3667,'longitude':4.8945}},None,None))
 
     with SampleAssistant(lang, device_model_id, device_id,
                          conversation_stream, None,
