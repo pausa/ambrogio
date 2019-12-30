@@ -66,6 +66,7 @@ DEFAULT_GRPC_DEADLINE = 60 * 3 + 5
 
 VOLUME=100
 
+VOWELS = ['a', 'e', 'i', 'o', 'u', 'j', 'h','y']
 
 class SampleAssistant(object):
     """Sample Assistant that supports conversations and device actions.
@@ -165,7 +166,7 @@ class SampleAssistant(object):
 
             if len(resp.audio_out.audio_data) > 0 and not resp.dialog_state_out.supplemental_display_text:
                 if self.last_request:
-                    self.speak('eseguo: {}'.format(self.last_request))
+                    self.speak('eseguito: {}'.format(self.last_request))
                     self.last_request = None
             #    if not self.conversation_stream.playing:
             #        self.conversation_stream.stop_recording()
@@ -441,7 +442,6 @@ def main(api_endpoint,
     def order(number):
         speak('ordine: {} eseguito'.format(number))
 
-    @device_handler.command('ambrogio.WEATHER')
     def weather(place_name, place, date_name, date):
         place_name=nvl(place_name, 'Haarlem')
         def_coordinates={'latitude': 52.3873878, 'longitude': 4.6462194}
@@ -456,15 +456,33 @@ def main(api_endpoint,
         wreq = dark.WeatherRequest(**params)
         wres = dark.call_api(wreq)
 
-        to_speak='{}, {} è {} con una temperatura durante '\
+        prop = 'a'
+        if place_name[0].lower() in VOWELS:
+            prop = 'ad'
+
+        to_speak='{} {} {} è {} con una temperatura percepita durante '\
                 'il giorno di {} gradi e durante la notte di {}'.format(
-                    place_name,
                     date_name,
+                    prop,
+                    place_name,
                     wres.summaryHuman,
-                    round(wres.tempHigh),
-                    round(wres.tempLow)
+                    round(wres.tempHighFelt),
+                    round(wres.tempLowFelt)
                 )
 
+        return to_speak
+
+    @device_handler.command('ambrogio.WEATHER')
+    def weather_action(place_name, place, date_name, date):
+        speak(weather(place_name, place, date_name, date))
+
+    @device_handler.command('ambrogio.GREET')
+    def morning(nope):
+        to_speak = '. '.join([
+                'salve',
+                weather(None,None,None,None),
+                weather('amsterdam',{'coordinates':{'latitude':52.3667,'longitude':4.8945}},None,None)
+                ])
         speak(to_speak)
 
     with SampleAssistant(lang, device_model_id, device_id,
