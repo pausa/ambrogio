@@ -4,7 +4,7 @@ import datetime as dt
 
 API_TEMPLATE='https://api.darksky.net/forecast'
 API_QUERY={
-        'exclude':'minutely,hourly,alerts,flags,currently',
+        'exclude':'minutely,hourly,alerts,flags',
         'lang':'it',
         'units':'ca'
         }
@@ -36,9 +36,12 @@ def call_api(wreq):
             )
     res.raise_for_status()
     daily = res.json()['daily']['data'][0]
+    curr = res.json().get('currently')
     return WeatherResponse(
             dt.datetime.fromtimestamp(daily['time']),
             daily['icon'],
+            curr.get('temperature') if curr else None,
+            curr.get('apparetnTemperature') if curr else None,
             dt.datetime.fromtimestamp(daily['temperatureLowTime']),
             daily['temperatureLow'],
             daily['apparentTemperatureLow'],
@@ -57,6 +60,8 @@ class WeatherResponse:
     def __init__ (self, 
             time,
             summary,
+            temp,
+            tempFelt,
             tempLowTime,
             tempLow,
             tempLowFelt,
@@ -73,8 +78,19 @@ class WeatherResponse:
         self.tempHigh = tempHigh
         self.tempHighFelt = tempHighFelt
 
+        # find a better way to do this, for now using average
+        if temp:
+            self.temp = temp
+        else:
+            self.temp = (self.tempLow + self.tempHigh) / 2.
+
+        if tempFelt:
+            self.tempFelt = tempFelt
+        else:
+            self.tempFelt = (self.tempLowFelt + self.tempHighFelt) / 2.
+
 if __name__ == "__main__":
-    day = dt.date.today() + dt.timedelta(days=1)
+    day = dt.date.today() + dt.timedelta(days=5)
     day = None
     def_coordinates={
             'latitude': 52.3873878, 
@@ -85,6 +101,8 @@ if __name__ == "__main__":
     print ('time: {}'.format(res.tempLowTime))
     print ('time: {}'.format(res.tempHighTime))
     print ('human: {}'.format(res.summaryHuman))
+    print ('temp: {}'.format(res.temp))
+    print ('tempFelt: {}'.format(res.tempFelt))
     print ('summary: {}'.format(res.summary))
     print ('templow: {}'.format(res.tempLow))
     print ('temphigh: {}'.format(res.tempHigh))

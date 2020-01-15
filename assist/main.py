@@ -16,7 +16,7 @@
 
 import concurrent.futures
 import json
-import logging
+import logging as lf
 import os
 import os.path
 import pathlib2 as pathlib
@@ -37,8 +37,14 @@ from google.assistant.embedded.v1alpha2 import (
 
 from tenacity import retry, stop_after_attempt, retry_if_exception
 
-import snowboydecoder
+import platform, importlib
+
+#import snowboydecoder
+meta="snowboydecoder"
+snowboydecoder = getattr(__import__(format(platform.uname().processor), fromlist=[meta]), meta)
+
 from google.cloud import texttospeech
+import requests
 import datetime as dt
 import integration.darksky as dark
 
@@ -70,6 +76,9 @@ VOWELS = ['a', 'e', 'i', 'o', 'u', 'j', 'h','y']
 MIDNIGHT = dt.time(hour=0)
 MORNING = dt.timedelta(hours=12)
 AFTERNOON = dt.timedelta(hours=17)
+
+lf.basicConfig()
+logging = lf.getLogger('assist')
 
 class SampleAssistant(object):
     """Sample Assistant that supports conversations and device actions.
@@ -335,7 +344,7 @@ def main(api_endpoint,
         $ python -m googlesamples.assistant -i <input file> -o <output file>
     """
     # Setup logging.
-    logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO)
+    logging.setLevel(lf.DEBUG if verbose else lf.INFO)
 
     # Load OAuth 2.0 credentials.
     try:
@@ -428,7 +437,8 @@ def main(api_endpoint,
 
     device_handler = device_helpers.DeviceRequestHandler(device_id)
     
-    def speak(text):
+    #TODO find a better way, this method is getting big
+    def speak(text, publishing=None):
         text=text.replace("\\n", ". ")
         text=text.replace("\\t", ". ")
         text=text.replace(" h ", " ore ")
@@ -438,6 +448,8 @@ def main(api_endpoint,
         logging.info('saying: {}'.format(order))
         response = tts_client.synthesize_speech(order, tts_voice, tts_config)
         conversation_stream.start_playback()
+        if publishing:
+            publish(publishing['resource'], publishing['payload'])
         conversation_stream.write(response.audio_content)
         conversation_stream.stop_playback()
 
@@ -463,21 +475,30 @@ def main(api_endpoint,
         if place_name[0].lower() in VOWELS:
             prop = 'ad'
 
-        to_speak='{} {} {} è {} con una temperatura percepita durante '\
-                'il giorno di {} gradi e durante la notte di {}'.format(
+        to_speak='{} {} {} è {} con una temperatura percepita di {} gradi'.format(
                     date_name,
                     prop,
                     place_name,
                     wres.summaryHuman,
-                    round(wres.tempHighFelt),
-                    round(wres.tempLowFelt)
+                    round(wres.tempFelt)
                 )
+        to_publish={
+                'min' : round(wres.tempLowFelt),
+                'max' : round(wres.tempHighFelt),
+                'temp' : round(wres.tempFelt),
+                'icon' : wres.summary
+                }
 
-        return to_speak
+        publishing = {
+                'resource' : 'weather',
+                'payload' : to_publish
+                }
+
+        speak(to_speak, publishing)
 
     @device_handler.command('ambrogio.WEATHER')
     def weather_action(place_name, place, date_name, date):
-        speak(weather(place_name, place, date_name, date))
+        weather(place_name, place, date_name, date)
 
     @device_handler.command('ambrogio.GREET')
     def morning(nope):
@@ -493,8 +514,8 @@ def main(api_endpoint,
             greet = 'buona sera'
 
         speak(greet)
-        speak(weather(None,None,None,None))
-        speak(weather('amsterdam',{'coordinates':{'latitude':52.3667,'longitude':4.8945}},None,None))
+        weather(None,None,None,None)
+        weather('amsterdam',{'coordinates':{'latitude':52.3667,'longitude':4.8945}},None,None)
 
     with SampleAssistant(lang, device_model_id, device_id,
                          conversation_stream, None,
@@ -533,6 +554,12 @@ def nvl(value, ifNone, tr=lambda x: x):
     if len(value) == 0:
         return ifNone
     return tr(value)
+
+def publish(resource, payload):
+    requests.post(
+            'http://localhost:3000/{}'.format(resource),
+            payload
+            )
 
 if __name__ == '__main__':
     main()
