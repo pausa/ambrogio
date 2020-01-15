@@ -1,7 +1,7 @@
 <template>
   <div id="app">
     <div id="container">
-      <component :is="display.component" v-bind="display.props"/>
+      <component :is="display.component" v-bind="display.props"/> 
     </div>
   </div>
 </template>
@@ -9,13 +9,15 @@
 <script>
 import Clock from './components/Clock.vue';
 import notification from './components/Notification.vue';
+import weather from './components/Weather.vue';
 const { ipcRenderer } = window.require('electron');
 
 export default {
   name: 'app',
   components: {
     Clock,
-    notification
+    notification,
+    weather
   },
   data: function(){
       return {
@@ -46,7 +48,6 @@ export default {
       this.backlog.push(next);
 
       this.tryUpdateComponent();
-      //setTimeout(function(){this.component = 'Clock'}.bind(this), 5000);
     },
     tryUpdateComponent: function(){
       // I want the first change to happena asap, but wait a timeout for the others
@@ -79,9 +80,9 @@ body {
   font-family: 'Avenir', Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  align: center;
+  vertical-align: center;
   height: 100%;
-  color: #ffe898;
+  color: #ffffff;
   background: #000000;
   overflow: hidden;
 }

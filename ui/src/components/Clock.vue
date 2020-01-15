@@ -6,7 +6,7 @@
   </div>
 </template>
 <script>
-var days = [
+const days = [
     'DOMENICA', 
     'LUNEDI',
     'MARTEDI',

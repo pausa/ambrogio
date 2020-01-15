@@ -19,24 +19,29 @@ app.on('ready', () => {
   win = new BrowserWindow({
     width: 320,
     height: 240,
-    kiosk: true,
+    kiosk: !isDevelopment,
     frame: false,
     webPreferences: {
       nodeIntegration: true
     }
   })
   loadFront(win);
-  if (isDevelopment) {
-    win.webContents.openDevTools();
-  }
 });
 
 const rest = express();
 rest.use(bodyParser.urlencoded({ extended: false }));
 rest.use(bodyParser.json());
+// TODO find a way to do this without code duplication
 rest.post('/notification', function (req, res) {
   let arg = {};
   arg.type = 'notification';
+  arg.body = req.body;
+  win.webContents.send('new-component', arg);
+  res.sendStatus(200);
+});
+rest.post('/weather', function (req, res) {
+  let arg = {};
+  arg.type = 'weather';
   arg.body = req.body;
   win.webContents.send('new-component', arg);
   res.sendStatus(200);
