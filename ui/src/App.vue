@@ -82,7 +82,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   vertical-align: center;
   height: 100%;
-  color: #ffffff;
+  color: #ff0000;
   background: #000000;
   overflow: hidden;
 }

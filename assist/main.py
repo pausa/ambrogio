@@ -41,7 +41,7 @@ import platform, importlib
 
 #import snowboydecoder
 meta="snowboydecoder"
-snowboydecoder = getattr(__import__(format(platform.uname().processor), fromlist=[meta]), meta)
+snowboydecoder = getattr(__import__(format(platform.uname().machine), fromlist=[meta]), meta)
 
 from google.cloud import texttospeech
 import requests
@@ -139,7 +139,7 @@ class SampleAssistant(object):
 
     @retry(reraise=True, stop=stop_after_attempt(3),
            retry=retry_if_exception(is_grpc_error_unavailable))
-    def assist(self):
+    def assist(self, text_query=None):
         """Send a voice request to the Assistant and playback the response.
 
         Returns: True if conversation should continue.
@@ -147,13 +147,11 @@ class SampleAssistant(object):
         continue_conversation = False
         device_actions_futures = []
 
-        # DINGING AS LATE AS POSSIBLE
-        ding(self.conversation_stream)
         self.conversation_stream.start_recording()
         logging.info('Recording audio request.')
 
         def iter_log_assist_requests():
-            for c in self.gen_assist_requests():
+            for c in self.gen_assist_requests(text_query):
                 assistant_helpers.log_assist_request_without_audio(c)
                 yield c
             logging.debug('Reached end of AssistRequest iteration.')
@@ -178,16 +176,16 @@ class SampleAssistant(object):
 
             if len(resp.audio_out.audio_data) > 0 and not resp.dialog_state_out.supplemental_display_text:
                 if self.last_request:
-                    self.speak('eseguito: {}'.format(self.last_request))
+                    logging.debug('eseguito: {}'.format(self.last_request))
                     self.last_request = None
-            #    if not self.conversation_stream.playing:
-            #        self.conversation_stream.stop_recording()
-            #        self.conversation_stream.start_playback()
-            #        logging.info('Playing assistant response.')
-            #    self.conversation_stream.write(resp.audio_out.audio_data)
+            if len(resp.audio_out.audio_data) > 0: 
+                if not self.conversation_stream.playing:
+                    self.conversation_stream.stop_recording()
+                    self.conversation_stream.start_playback()
+                    logging.info('Playing assistant response.')
+                self.conversation_stream.write(resp.audio_out.audio_data)
             if resp.dialog_state_out.supplemental_display_text:
-                logging.info("response: {}".format(resp.dialog_state_out.supplemental_display_text))
-                self.speak(resp.dialog_state_out.supplemental_display_text)
+                logging.debug("additional text: {}".format(resp.dialog_state_out.supplemental_display_text))
                 self.last_request = None
             if resp.dialog_state_out.conversation_state:
                 conversation_state = resp.dialog_state_out.conversation_state
@@ -220,14 +218,15 @@ class SampleAssistant(object):
         self.conversation_stream.stop_playback()
         return continue_conversation
 
-    def gen_assist_requests(self):
+    def gen_assist_requests(self, text_query=None):
         """Yields: AssistRequest messages to send to the API."""
 
-        config = embedded_assistant_pb2.AssistConfig(
-            audio_in_config=embedded_assistant_pb2.AudioInConfig(
+        audio_in_config=embedded_assistant_pb2.AudioInConfig(
                 encoding='LINEAR16',
                 sample_rate_hertz=self.conversation_stream.sample_rate,
-            ),
+            ) 
+        config = embedded_assistant_pb2.AssistConfig(
+            audio_in_config=audio_in_config,
             audio_out_config=embedded_assistant_pb2.AudioOutConfig(
                 encoding='LINEAR16',
                 sample_rate_hertz=self.conversation_stream.sample_rate,
@@ -242,7 +241,8 @@ class SampleAssistant(object):
             device_config=embedded_assistant_pb2.DeviceConfig(
                 device_id=self.device_id,
                 device_model_id=self.device_model_id,
-            )
+            ),
+            text_query=text_query
         )
         if self.display:
             config.screen_out_config.screen_mode = PLAYING
@@ -251,10 +251,18 @@ class SampleAssistant(object):
         # The first AssistRequest must contain the AssistConfig
         # and no audio data.
         yield embedded_assistant_pb2.AssistRequest(config=config)
-        for data in self.conversation_stream:
-            # Subsequent requests need audio data, but not config.
-            yield embedded_assistant_pb2.AssistRequest(audio_in=data)
+        if not text_query:
+            for data in self.conversation_stream:
+                # Subsequent requests need audio data, but not config.
+                yield embedded_assistant_pb2.AssistRequest(audio_in=data)
 
+class Fulfillment():
+    def __init__ (self, text, publishing=None):
+        self.text = text
+        self.publishing = publishing
+        
+class EchoEffect():
+    pass
 
 @click.command()
 @click.option('--api-endpoint', default=ASSISTANT_API_ENDPOINT)
@@ -436,9 +444,15 @@ def main(api_endpoint,
 
 
     device_handler = device_helpers.DeviceRequestHandler(device_id)
+    fulfillments = []
+    #TODO find a better way, is a bit too tangled
+    echo_effect = EchoEffect()
     
-    #TODO find a better way, this method is getting big
     def speak(text, publishing=None):
+        publisher = lambda: publish(publishing['resource'], publishing['payload']) if publishing else None
+        use_echo(text, publisher)
+
+    def use_tts(text, publisher=lambda: True):
         text=text.replace("\\n", ". ")
         text=text.replace("\\t", ". ")
         text=text.replace(" h ", " ore ")
@@ -448,14 +462,19 @@ def main(api_endpoint,
         logging.info('saying: {}'.format(order))
         response = tts_client.synthesize_speech(order, tts_voice, tts_config)
         conversation_stream.start_playback()
-        if publishing:
-            publish(publishing['resource'], publishing['payload'])
+        publisher()
         conversation_stream.write(response.audio_content)
         conversation_stream.stop_playback()
 
+    def use_echo(text, publisher):
+        echo_effect.action = publisher
+        assistant.assist("pappagallo {}".format(text))
+
+
     @device_handler.command('ambrogio.TEST')
     def order(number):
-        speak('ordine: {} eseguito'.format(number))
+        ful = Fulfillment('ordine: {} eseguito'.format(number))
+        fulfillments.append(ful)
 
     def weather(place_name, place, date_name, date):
         place_name=nvl(place_name, 'Haarlem')
@@ -494,11 +513,20 @@ def main(api_endpoint,
                 'payload' : to_publish
                 }
 
-        speak(to_speak, publishing)
+        ful = Fulfillment(to_speak, publishing)
+        fulfillments.append(ful)
 
     @device_handler.command('ambrogio.WEATHER')
     def weather_action(place_name, place, date_name, date):
         weather(place_name, place, date_name, date)
+
+    @device_handler.command('ambrogio.ECHO')
+    def echo_action(txt):
+        logging.info("echoing: {}".format(txt))
+        if echo_effect.action:
+            echo_effect.action()
+            echo_effect.action = None
+
 
     @device_handler.command('ambrogio.GREET')
     def morning(nope):
@@ -513,7 +541,8 @@ def main(api_endpoint,
         else:
             greet = 'buona sera'
 
-        speak(greet)
+        ful = Fulfillment(greet)
+        fulfillments.append(ful)
         weather(None,None,None,None)
         weather('amsterdam',{'coordinates':{'latitude':52.3667,'longitude':4.8945}},None,None)
 
@@ -522,12 +551,16 @@ def main(api_endpoint,
                          grpc_channel, grpc_deadline,
                          device_handler, speak) as assistant:
         def do_assist():
-            logging.debug("ambrogio engaging")
+            logging.info("ambrogio engaging")
+            ding(conversation_stream)
 
             continue_conversation = assistant.assist()
             while continue_conversation:
                 continue_conversation = assistant.assist()
-            logging.debug("ambrogio out")
+            while len(fulfillments) > 0:
+                ful = fulfillments.pop(0)
+                speak(ful.text, ful.publishing)
+            logging.info("ambrogio out")
 
             ding(conversation_stream)
 

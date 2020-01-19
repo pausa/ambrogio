@@ -95,6 +95,88 @@
           }
         }
       }
+    },
+    {
+      "name":"amborgio.GREET",
+      "availability": {
+        "deviceClasses" : [
+          {
+          "assistantSdkDevice": {}
+          }
+        ]
+      },
+      "intent" : {
+        "name": "ambrogio.GREET",
+        "parameters":[],
+        "trigger" : {
+          "queryPatterns" : [
+            "salve",
+            "buongiorno",
+            "come va"
+          ]
+        }
+      },
+      "fulfillment": {
+        "staticFulfillment": {
+          "templatedResponse" : {
+            "items" : [
+              {
+                "deviceExecution": {
+                  "command" : "ambrogio.GREET",
+                  "params" : {
+                    "nope": ""
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name":"amborgio.ECHO",
+      "availability": {
+        "deviceClasses" : [
+          {
+          "assistantSdkDevice": {}
+          }
+        ]
+      },
+      "intent" : {
+        "name": "ambrogio.ECHO",
+        "parameters":[
+          {
+            "name" : "txt",
+            "type" : "SchemaOrg_Text"
+          }
+        ],
+        "trigger" : {
+          "queryPatterns" : [
+            "pappagallo $SchemaOrg_Text:txt"
+          ]
+        }
+      },
+      "fulfillment": {
+        "staticFulfillment": {
+          "templatedResponse" : {
+            "items" : [
+              {
+                  "simpleResponse": {
+                      "textToSpeech": "$txt"
+                  }
+              },
+              {
+                "deviceExecution": {
+                  "command" : "ambrogio.ECHO",
+                  "params" : {
+                    "txt": "$txt"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
     }
   ]
 }
